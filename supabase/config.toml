@@ -1,0 +1,13 @@
+project_id = "saeofugyscjfgqqnqowk"
+
+[functions.enrich-alert]
+verify_jwt = false
+
+[functions.score-incidents]
+verify_jwt = false
+
+[functions.execute-response]
+verify_jwt = false
+
+[functions.cleanup-data]
+verify_jwt = false
