@@ -1,196 +1,167 @@
-# Welcome to your Lovable project
+# 🚨 Intrusion Detection System (IDS) — Kanna’s Project
 
-## Project info
+## 📌 Overview
 
-**URL**: https://lovable.dev/projects/03fce7e1-2ac0-4ece-9dfe-c27597a1fdd6
+This project is a **real-time Intrusion Detection System (IDS)** designed to monitor network traffic, detect suspicious activities, and automatically respond to potential threats.
 
-## How can I edit this code?
+It implements a complete cybersecurity pipeline:
 
-There are several ways of editing your application.
+> **Detection → Enrichment → Risk Scoring → Response → Notification**
 
-**Use Lovable**
+The system is built with a modular architecture and includes a **live monitoring dashboard** for visualization.
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/03fce7e1-2ac0-4ece-9dfe-c27597a1fdd6) and start prompting.
+---
 
-Changes made via Lovable will be committed automatically to this repo.
+## ⚙️ Features
 
-**Use your preferred IDE**
+### 🔍 Real-Time Traffic Monitoring
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+* Captures live network packets using packet sniffing
+* Processes IP-based traffic continuously
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+### 🚨 Threat Detection
 
-Follow these steps:
+* Port Scan Detection
+* DoS / Traffic Flood Detection
+* Flow-based anomaly detection
+* Regex-based threat matching
 
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
+### 📊 Risk Scoring Engine
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
+* Assigns severity scores to detected events
+* Aggregates multiple signals into actionable alerts
 
-# Step 3: Install the necessary dependencies.
-npm i
+### ⚡ Automated Response System
 
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
-```
+* IP Blocking (Windows Firewall / iptables)
+* Rate Limiting
+* Action cooldown & suppression
 
-**Edit a file directly in GitHub**
+### 📢 Notification System
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+* Sends alerts to SOC (Security Operations Center)
+* Supports extensible notification configurations
 
-**Use GitHub Codespaces**
+### 🌐 Dashboard (Frontend)
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+* Built with React + Vite
+* Real-time monitoring UI
+* Alerts, events, and system metrics visualization
 
-## What technologies are used for this project?
+---
 
-This project is built with:
-
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
-
-## How can I deploy this project?
-
-Simply open [Lovable](https://lovable.dev/projects/03fce7e1-2ac0-4ece-9dfe-c27597a1fdd6) and click on Share -> Publish.
-
-## Can I connect a custom domain to my Lovable project?
-
-Yes, you can!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/tips-tricks/custom-domain#step-by-step-guide)
-
-## PWA (Progressive Web App) Features
-
-This project is configured as a Progressive Web App (PWA), which means:
-
-✅ **Installable** - Can be installed on mobile devices and desktops  
-✅ **Offline Support** - Works offline with cached data  
-✅ **Fast Loading** - Assets are precached for instant loading  
-✅ **App-like Experience** - Runs in standalone mode without browser UI
-
-### Local Development with PWA
-
-When running locally in VS Code or any IDE:
-
-```sh
-# Start development server (PWA disabled for hot-reload)
-npm run dev
-
-# App runs on: http://localhost:8080
-```
-
-The development server runs on **port 8080** as configured in `vite.config.ts`. Service worker is disabled during development to prevent caching issues.
-
-### Testing PWA Features Locally
-
-To test PWA features (install prompt, offline mode, etc.):
-
-```sh
-# Build production version
-npm run build
-
-# Preview production build with PWA enabled
-npm run preview
-
-# Access at: http://localhost:4173
-```
-
-### Install on Mobile Devices
-
-**Access from your phone/tablet:**
-1. Find your computer's local IP address:
-   - Windows: `ipconfig`
-   - Mac/Linux: `ifconfig` or `ip addr`
-2. On your mobile device (connected to same WiFi), visit:
-   - `http://YOUR_LOCAL_IP:8080` (dev server)
-   - `http://YOUR_LOCAL_IP:4173` (preview server)
-
-**Install on Android:**
-- Chrome will show an "Install" prompt
-- Or tap the menu and select "Install app"
-
-**Install on iOS:**
-- Tap the Share button in Safari
-- Scroll down and tap "Add to Home Screen"
-- Tap "Add" in the top right
-
-### Install on Desktop
-
-**Chrome/Edge:**
-- Click the install icon (⊕) in the address bar
-- Or click the menu → "Install IDS Dashboard"
-
-**The app will:**
-- Appear in your app drawer/start menu
-- Run in a standalone window
-- Work offline with cached data
-- Update automatically in the background
-
-## Real-Time Intrusion Detection System
-
-### How It Works
-
-A Python agent (`docs/ids_agent.py`) captures live network packets using **scapy** and feeds them through two detection modules in real time:
-
-- **Port Scan Detector** — flags a source IP that contacts 15+ unique destination ports within a 10-second sliding window.
-- **DoS / DDoS Detector** — flags a source IP sending 100+ packets per second, or an overall traffic spike exceeding 3× the rolling baseline.
-
-Detected alerts are deduplicated locally (same type + source within 60 seconds) and POSTed to a Supabase edge function.
-
-### Detection Pipeline
+## 🏗️ Architecture
 
 ```
-Packet captured (scapy)
-  → PortScanDetector + DoSDetector + FlowAggregator
-  → Every 2 s: check() → alerts[] → AlertManager deduplicates
-  → POST to ingest-traffic edge function
-  → Edge function inserts into live_alerts (with server-side dedupe)
-  → Frontend polls live_alerts every 2 s → toast notification
+Packet Capture → Detection Engine → Risk Scoring → Response Manager → Supabase → Dashboard
 ```
 
-The edge function also runs **server-side backup detection** on each batch (10+ unique ports = port scan, 50+ packets = DoS) as a safety net.
+---
 
-### Alert Flow
+## 🧰 Technologies Used
 
-When a high-severity alert is inserted into `live_alerts`, the React dashboard picks it up within 2–4 seconds and shows a destructive toast notification with the attack type and source IP.
+### Backend
 
-### Running the Agent
+* Python
+* Scapy (Packet Capture)
+* Requests (API Communication)
 
-```sh
-# 1. Install dependencies
-pip install scapy psutil requests
+### Frontend
 
-# 2. Set your API key in docs/ids_agent.py
-#    AGENT_API_KEY = "your-secret-key"
-#    (must match the AGENT_API_KEY secret in your Supabase project)
+* React (Vite)
+* TypeScript
+* ShadCN UI
 
-# 3. Run (requires root for raw socket capture)
-sudo python docs/ids_agent.py
+### Database & Backend Services
+
+* Supabase (PostgreSQL + APIs)
+
+### System Integration
+
+* Windows Firewall (`netsh`)
+* Linux (`iptables`)
+
+---
+
+## 🚀 Getting Started
+
+### 1️⃣ Clone the Repository
+
+```bash
+git clone https://github.com/Harishx5/Intrusion-Detection-System-.git
+cd Intrusion-Detection-System-
 ```
 
-### Testing
+---
 
-Simulate attacks to verify the pipeline end-to-end:
+### 2️⃣ Install Dependencies
 
-```sh
-# Port scan (requires nmap)
-nmap -sS -p 1-100 <TARGET_IP>
+#### Backend
 
-# SYN flood / DoS (requires hping3)
-sudo hping3 -S --flood -p 80 <TARGET_IP>
+```bash
+pip install -r requirements.txt
 ```
 
-Alerts should appear in the dashboard within seconds.
+#### Frontend
+
+```bash
+npm install
+```
+
+---
+
+### 3️⃣ Run the Project
+
+```bash
+.\ids start
+```
+
+This will:
+
+* Start the IDS backend engine
+* Launch the frontend dashboard
+
+---
+
+## ⚠️ Important Notes
+
+* Run the system with **Administrator privileges** for firewall actions
+* Ensure correct **Supabase API keys** are configured
+* Avoid blocking **local or trusted IPs** (use whitelist)
+
+---
+
+## 📂 Project Structure
+
+```
+├── detectors/           # Detection modules (DoS, Port Scan, etc.)
+├── core/                # Core logic (baseline, tracking)
+├── response_manager/    # Auto-response handling
+├── utils/               # Helper utilities
+├── frontend/            # React dashboard
+├── logs/                # System logs
+└── config.yaml          # Configuration file
+```
+
+---
+
+## 🔧 Future Improvements
+
+* Adaptive detection (dynamic thresholds)
+* Enhanced correlation engine
+* Improved alert deduplication
+* Advanced visualization in dashboard
+
+---
+
+## 👨‍💻 Author
+
+**Kanna (Harish)**
+Computer Science Engineer
+Focused on AI Systems & Cybersecurity
+
+---
+
+## 📜 License
+
+This project is developed for educational and research purposes.
