@@ -45,6 +45,13 @@ import threading
 import queue
 import logging
 import psutil
+import yaml
+
+try:
+    with open("config.yaml", "r") as f:
+        config_yaml = yaml.safe_load(f)
+except FileNotFoundError:
+    config_yaml = {}
 
 try:
     from scapy.all import sniff, IP, TCP, UDP, Raw
@@ -87,6 +94,8 @@ RULE_REFRESH_INTERVAL = 30   # seconds between rule refreshes
 RISK_SCORING_INTERVAL = 300  # seconds between risk score recalculations
 # ============================================================
 
+blocked_ips = set()
+
 # Thread-safe queue holding parsed packet dicts until the next send cycle.
 packet_queue = queue.Queue(maxsize=500)
 
@@ -113,6 +122,7 @@ threat_detector = None
 # State
 last_rule_refresh = 0.0
 last_risk_scoring = 0.0
+last_baseline_reset = 0.0
 active_regex_rules = []
 
 
@@ -145,12 +155,20 @@ def refresh_rules():
 
         rule_count = len(config["raw_rules"])
         regex_count = len(active_regex_rules)
+        
+        # Determine if rules changed
+        old_version = getattr(refresh_rules, "version", None)
+        new_version = config.get("version", time.time())
+        if old_version != new_version:
+            logging.info(f"Rules updated to version {new_version}")
+            refresh_rules.version = new_version
+        
         if rule_count > 0:
-            print(f"[~] Loaded {rule_count} rules ({regex_count} regex patterns active)")
+            logging.info(f"Loaded {rule_count} rules ({regex_count} regex patterns active)")
 
         last_rule_refresh = time.time()
     except Exception as e:
-        print(f"[!] Rule refresh failed: {e}")
+        logging.error(f"Rule refresh failed: {e}")
 
 
 def evaluate_regex_rules(packet_data):
@@ -202,13 +220,19 @@ def packet_callback(packet):
     Scapy callback — invoked for every captured IP packet.
     Extracts fields, feeds to detectors, enqueues for batch sending.
     """
-    if IP not in packet:
+    if not packet.haslayer(IP):
+        return
+
+    src_ip = packet[IP].src
+    if src_ip.startswith("192.168.") or src_ip.startswith("172.64."):
+        return
+    if src_ip in blocked_ips:
         return
 
     ts = time.time()
 
     data = {
-        "source_ip": packet[IP].src,
+        "source_ip": src_ip,
         "destination_ip": packet[IP].dst,
         "protocol": "TCP" if TCP in packet else "UDP" if UDP in packet else "Other",
         "packet_size": len(packet),
@@ -323,6 +347,8 @@ def handle_high_severity_alerts(alerts):
             try:
                 actions = response_manager.auto_respond(incident_data)
                 if actions:
+                    if "block_ip" in actions:
+                        blocked_ips.add(source_ip)
                     print(f"[RESPONSE] {source_ip}: {', '.join(actions)}")
             except Exception as e:
                 logger.error(f"Auto-response failed: {e}")
@@ -448,22 +474,50 @@ def send_batch():
         "flow_summaries": flow_summaries,
     }
 
-    try:
-        resp = req_lib.post(
-            EDGE_FUNCTION_URL,
-            json=payload,
-            headers={"Content-Type": "application/json"},
-            timeout=10,
-        )
-        pkt_count = len(send_packets)
-        flows = flow_aggregator.get_flows()
-        print(
-            f"[+] Packets: {pkt_count} | Alerts: {sent_count} | "
-            f"Flows: {len(flows)} | Flow Summaries: {len(flow_summaries)} | "
-            f"CPU: {metrics['cpu_usage']}% | Status: {resp.status_code}"
-        )
-    except req_lib.exceptions.RequestException as e:
-        print(f"[!] Send failed: {e}")
+    failed_queue = getattr(send_batch, "failed_queue", [])
+
+    def send_with_retry(payload_data):
+        import time
+        for i in range(3):
+            try:
+                res = req_lib.post(
+                    EDGE_FUNCTION_URL,
+                    json=payload_data,
+                    headers={"Content-Type": "application/json"},
+                    timeout=10,
+                )
+                if res.status_code == 200:
+                    return True
+            except:
+                time.sleep(2)
+        return False
+
+    api_status = "ok"
+    if not send_with_retry(payload):
+        failed_queue.append(payload)
+        logging.error("API failed - Payload queued")
+        api_status = "failed"
+    else:
+        # flush failed queue
+        while failed_queue:
+            old_payload = failed_queue[0]
+            if send_with_retry(old_payload):
+                failed_queue.pop(0)
+            else:
+                break
+
+    send_batch.failed_queue = failed_queue
+
+    pkt_count = len(send_packets)
+    flows = flow_aggregator.get_flows()
+    logging.info(f"Packets: {pkt_count} | Alerts: {sent_count} | Flows: {len(flows)} | CPU: {metrics['cpu_usage']}% | Status: {api_status}")
+    
+    # Health Monitoring Endpoint Print
+    print({
+        "queue_size": packet_queue.qsize(),
+        "alerts_generated": sent_count,
+        "api_status": api_status
+    })
 
 
 def main():
@@ -471,7 +525,7 @@ def main():
     global alert_manager, rule_fetcher, threat_enricher, asset_discovery
     global response_manager, notification_dispatcher, suppression_engine
     global threat_detector
-    global last_rule_refresh, last_risk_scoring
+    global last_rule_refresh, last_risk_scoring, last_baseline_reset
 
     if AGENT_API_KEY == "REPLACE_WITH_YOUR_SECRET_KEY":
         print("ERROR: Set AGENT_API_KEY before running.")
@@ -556,6 +610,7 @@ def main():
     # Initial risk scoring
     print("[*] Running initial risk scoring...")
     run_risk_scoring()
+    last_baseline_reset = time.time()
 
     # Start packet capture
     sniffer_thread = threading.Thread(target=start_sniffing, daemon=True)
@@ -571,6 +626,15 @@ def main():
             # Periodic rule refresh
             if time.time() - last_rule_refresh >= RULE_REFRESH_INTERVAL:
                 refresh_rules()
+
+            # Dynamic Threshold Update (Baseline reset)
+            if time.time() - last_baseline_reset >= 60:
+                try:
+                    from core.baseline_engine import reset_baseline
+                    reset_baseline()
+                except ImportError:
+                    pass
+                last_baseline_reset = time.time()
     except KeyboardInterrupt:
         # Print final stats
         print("\n" + "=" * 60)
@@ -586,5 +650,17 @@ def main():
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
+    import os
+    os.makedirs("logs", exist_ok=True)
+    logging.basicConfig(
+        filename="logs/ids.log",
+        level=logging.INFO,
+        format="%(asctime)s - %(levelname)s - %(message)s"
+    )
+    # Also log to console
+    console = logging.StreamHandler()
+    console.setLevel(logging.INFO)
+    formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
+    console.setFormatter(formatter)
+    logging.getLogger("").addHandler(console)
     main()

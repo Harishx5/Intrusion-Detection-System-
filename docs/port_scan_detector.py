@@ -42,6 +42,13 @@ class PortScanDetector:
         ts = packet.get("timestamp", time.time())
         if port > 0:
             self._history[src].append((ts, port))
+            
+            # --- BEHAVIOR TRACKING ---
+            try:
+                from core.behavior_tracker import behavior
+                behavior[src]["unique_ports"].add(port)
+            except ImportError:
+                pass
 
     def check(self):
         """
@@ -60,7 +67,17 @@ class PortScanDetector:
                 continue
 
             unique_ports = set(p for _, p in entries)
-            if len(unique_ports) >= self.threshold:
+            
+            # --- ADAPTIVE PORT SCAN CHECK ---
+            try:
+                from core.behavior_tracker import behavior
+                behavior_data = behavior[src]
+                historical_ports = len(behavior_data.get("unique_ports", set()))
+                dynamic_threshold = max(self.threshold, historical_ports * 2) if historical_ports > 0 else self.threshold
+            except ImportError:
+                dynamic_threshold = self.threshold
+                
+            if len(unique_ports) >= dynamic_threshold:
                 # Minute-granularity key to avoid repeat alerts
                 window_key = int(now / 60)
                 dedupe_key = hashlib.md5(
@@ -73,7 +90,7 @@ class PortScanDetector:
                     "source_ip": src,
                     "description": (
                         f"Port scan detected: {src} probed {len(unique_ports)} "
-                        f"unique ports in {self.window_seconds}s"
+                        f"unique ports in {self.window_seconds}s (threshold: {dynamic_threshold})"
                     ),
                     "detection_module": "port_scan_detector",
                     "dedupe_key": dedupe_key,

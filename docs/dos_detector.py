@@ -92,6 +92,13 @@ class DoSDetector:
         self._per_source[src].append(ts)
         self._global.append(ts)
 
+        # Update adaptive baseline
+        try:
+            from core.baseline_engine import update_baseline
+            update_baseline(src)
+        except ImportError:
+            pass
+
         # Track first-seen for burst/sustained classification
         if src not in self._source_first_seen:
             self._source_first_seen[src] = ts
@@ -132,9 +139,19 @@ class DoSDetector:
                 continue
 
             pps = len(timestamps) / max(self.window_seconds, 1)
-            if pps >= self.pps_threshold:
+            
+            # --- ADAPTIVE BASELINE CHECK ---
+            try:
+                from core.baseline_engine import get_rate
+                baseline = get_rate(src)
+                # Spike detection: 3x average, but no lower than static threshold to avoid noise
+                dynamic_threshold = max(self.pps_threshold, baseline * 3) if baseline > 0 else self.pps_threshold
+            except ImportError:
+                dynamic_threshold = self.pps_threshold
+
+            if pps >= dynamic_threshold:
                 attack_mode = self._classify_attack_mode(src, now)
-                severity = self._compute_severity(pps, self.pps_threshold)
+                severity = self._compute_severity(pps, dynamic_threshold)
                 window_key = int(now / 60)
                 dedupe_key = hashlib.md5(
                     f"DoS_{src}_{window_key}".encode()
@@ -147,16 +164,16 @@ class DoSDetector:
                     "source_ip": src,
                     "description": (
                         f"DoS flooding detected ({attack_mode}): {src} sending "
-                        f"{pps:.0f} pps (threshold: {self.pps_threshold}, "
-                        f"{pps / self.pps_threshold:.1f}x over limit, "
+                        f"{pps:.0f} pps (threshold: {dynamic_threshold:.0f}, "
+                        f"{pps / dynamic_threshold:.1f}x over limit, "
                         f"duration: {duration:.0f}s)"
                     ),
                     "detection_module": "dos_detector",
                     "dedupe_key": dedupe_key,
                     "metadata": {
                         "packets_per_second": round(pps, 1),
-                        "threshold": self.pps_threshold,
-                        "threshold_multiplier": round(pps / self.pps_threshold, 2),
+                        "threshold": dynamic_threshold,
+                        "threshold_multiplier": round(pps / dynamic_threshold, 2),
                         "attack_mode": attack_mode,
                         "duration_seconds": round(duration, 1),
                     },

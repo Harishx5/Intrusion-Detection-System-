@@ -1,0 +1,10 @@
+port_scan:
+  threshold: 15
+  window: 10
+
+dos:
+  pps_threshold: 100
+
+api:
+  url: "https://saeofugyscjfgqqnqowk.supabase.co"
+  key: "Harishkanna@4 "

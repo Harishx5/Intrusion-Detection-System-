@@ -183,6 +183,24 @@ class IncidentScoringEngine:
             else:
                 recency += 0.5
 
+        # --- BEHAVIOR + RULES COMBINATION (Time-Based Anomaly) ---
+        import datetime
+        hour = datetime.datetime.fromtimestamp(now).hour
+        unusual_time = hour < 5
+        
+        correlated_score = 0
+        if any(t in ["Port Scan", "Network Scan"] for t in attack_types):
+            correlated_score += 40
+        if any(t in ["DoS", "DDoS", "Flooding"] for t in attack_types):
+            correlated_score += 40
+        if unusual_time:
+            correlated_score += 20
+            
+        if correlated_score > 70:
+            if "Correlated Attack" not in attack_types:
+                attack_types.append("Correlated Attack")
+            base += 50  # Boost base score for correlation
+
         total_score = round(base + diversity + sequence_bonus + recency)
         severity = score_severity(total_score)
 

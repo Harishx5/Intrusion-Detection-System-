@@ -32,6 +32,7 @@ import logging
 import subprocess
 import requests
 from typing import Dict, List, Optional, Any
+from utils.whitelist import is_whitelisted
 
 logger = logging.getLogger(__name__)
 
@@ -62,6 +63,15 @@ class ResponseManager:
         # Track recent actions to prevent duplicates
         self._recent_actions: Dict[str, float] = {}
         self._cooldown_seconds = 300  # 5 min cooldown per IP+action
+        self.recent_actions_spam = {}
+
+    def is_recent(self, ip: str, action: str) -> bool:
+        key = f"{ip}:{action}"
+        now = time.time()
+        if key in self.recent_actions_spam and now - self.recent_actions_spam[key] < 60:
+            return True
+        self.recent_actions_spam[key] = now
+        return False
 
     def _is_on_cooldown(self, action_type: str, target: str) -> bool:
         key = f"{action_type}:{target}"
@@ -119,6 +129,9 @@ class ResponseManager:
         scored_incident_id: str = None,
         reason: str = "",
     ) -> bool:
+        if is_whitelisted(ip):
+            return False  # skip blocking
+
         if self._is_on_cooldown("block_ip", ip):
             return False
 
@@ -233,7 +246,7 @@ class ResponseManager:
 
         # In production: integrate with Slack, PagerDuty, email, SMS, etc.
         if not self.dry_run:
-            logger.info(f"[PRODUCTION] Would send to {channel}")
+            logging.info("Notification sent to SOC")
         else:
             logger.info(f"[DRY RUN] Would notify {channel}")
 
@@ -306,56 +319,52 @@ class ResponseManager:
         """
         score = incident.get("total_score", 0)
         source_ip = incident.get("source_ip", "unknown")
+        
+        if self.is_recent(source_ip, "block"):
+            return []
+            
         incident_id = incident.get("id")
         scored_incident_id = incident.get("scored_incident_id")
         attack_types = incident.get("attack_types", [])
         actions_taken = []
-
         reason = f"Auto-response: score={score}, types={', '.join(attack_types)}"
 
-        if score >= self.auto_isolate_threshold:
-            self.isolate_host(source_ip, incident_id=incident_id,
-                            scored_incident_id=scored_incident_id, reason=reason)
+        def decide_action(score_val):
+            if score_val >= 90:
+                return "block"
+            elif score_val >= 50:
+                return "rate_limit"
+            else:
+                return "monitor"
+
+        action = decide_action(score)
+        
+        if action == "block":
+            self.isolate_host(source_ip, incident_id=incident_id, scored_incident_id=scored_incident_id, reason=reason)
             actions_taken.append("isolate_host")
 
-            self.block_ip(source_ip, incident_id=incident_id,
-                        scored_incident_id=scored_incident_id, reason=reason)
+            self.block_ip(source_ip, incident_id=incident_id, scored_incident_id=scored_incident_id, reason=reason)
             actions_taken.append("block_ip")
 
             self.capture_forensics(source_ip, incident_id=incident_id)
             actions_taken.append("capture_forensics")
 
             self.send_notification(
-                f"🚨 CRITICAL: Host {source_ip} isolated — score {score} "
-                f"({', '.join(attack_types)})",
+                f"🚨 CRITICAL: Host {source_ip} isolated — score {score} ({', '.join(attack_types)})",
                 channel="soc_critical",
                 severity="critical",
                 incident_id=incident_id,
             )
             actions_taken.append("send_notification")
 
-        elif score >= self.auto_block_threshold:
-            self.block_ip(source_ip, incident_id=incident_id,
-                        scored_incident_id=scored_incident_id, reason=reason)
-            actions_taken.append("block_ip")
-
-            self.send_notification(
-                f"⚠️ HIGH: IP {source_ip} blocked — score {score} "
-                f"({', '.join(attack_types)})",
-                channel="soc_team",
-                severity="high",
-                incident_id=incident_id,
-            )
-            actions_taken.append("send_notification")
-
-        elif score >= 30:
+        elif action == "rate_limit":
             self.rate_limit(source_ip, requests_per_minute=5, incident_id=incident_id)
             actions_taken.append("rate_limit")
 
             self.send_notification(
-                f"⚡ MEDIUM: Rate limiting {source_ip} — score {score}",
+                f"⚠️ HIGH: Rate limiting {source_ip} — score {score}",
                 channel="soc_team",
-                severity="medium",
+                severity="high",
                 incident_id=incident_id,
             )
             actions_taken.append("send_notification")

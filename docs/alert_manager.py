@@ -31,13 +31,21 @@ class AlertManager:
         self.dedup_window = dedup_window
         # {dedupe_key: expiry_timestamp} — keys expire after dedup_window
         self._seen = {}
+        self.recent_alerts = {}
+
+    def is_duplicate(self, alert):
+        key = (alert.get("source_ip"), alert.get("alert_type"))
+        now = time.time()
+        if key in self.recent_alerts and now - self.recent_alerts[key] < 60:
+            return True
+        self.recent_alerts[key] = now
+        return False
 
     def _cleanup(self):
         """Remove expired dedupe keys so memory doesn't grow unbounded."""
         now = time.time()
-        expired = [k for k, v in self._seen.items() if v < now]
-        for k in expired:
-            del self._seen[k]
+        self._seen = {k: v for k, v in self._seen.items() if v >= now}
+        self.recent_alerts = {k: v for k, v in self.recent_alerts.items() if v >= now - 60}
 
     def _make_dedupe_key(self, alert):
         """
@@ -60,6 +68,9 @@ class AlertManager:
         to_send = []
 
         for alert in alerts:
+            if self.is_duplicate(alert):
+                continue
+            
             key = self._make_dedupe_key(alert)
             alert["dedupe_key"] = key
 
