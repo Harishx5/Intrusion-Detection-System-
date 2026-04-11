@@ -266,6 +266,7 @@ export const useIDSDataStore = () => {
       description: threat.description,
       status: "active",
       threatId: threat.id,
+      ...({ metadata: { source: threat.attackType === 'AI Anomaly' ? 'AI' : 'Rule', confidence: threat.confidence } } as any),
     };
     
     setAlerts(prev => [alert, ...prev.slice(0, 49)]);
@@ -509,6 +510,7 @@ export const useIDSDataStore = () => {
         { pattern: "brute_force", check: () => (event.port === 22 || event.port === 3389) && Math.random() > 0.93, confidence: 88, attackType: "Brute Force", severity: "high" as const },
         { pattern: "sql_injection", check: () => !!event.payload?.includes("SELECT"), confidence: 95, attackType: "SQL Injection", severity: "high" as const },
         { pattern: "anomaly", check: () => (event.packetSize < 100 || event.packetSize > 1400) && Math.random() > 0.92, confidence: 75, attackType: "Anomaly", severity: "low" as const },
+        { pattern: "ai_anomaly", check: () => Math.random() > 0.94, confidence: 89, attackType: "AI Anomaly", severity: "high" as const },
       ];
 
       for (const rule of rules) {
