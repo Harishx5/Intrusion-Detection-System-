@@ -63,6 +63,7 @@ from port_scan_detector import PortScanDetector
 from dos_detector import DoSDetector
 from flow_aggregator import FlowAggregator
 from malware_behavior_detector import MalwareBehaviorDetector
+from ai_anomaly_detector import AIAnomalyDetector
 from alert_manager import AlertManager
 from rule_fetcher import RuleFetcher
 from threat_intel_enricher import ThreatIntelEnricher
@@ -106,6 +107,7 @@ port_scan_detector = PortScanDetector(threshold=15, window_seconds=10)
 dos_detector = DoSDetector(pps_threshold=100, window_seconds=10)
 flow_aggregator = FlowAggregator(window_seconds=10)
 malware_detector = MalwareBehaviorDetector(window_seconds=60)
+ai_detector = AIAnomalyDetector()
 
 # ---------------------------------------------------------------------------
 # Pipeline modules (instantiated in main() with real credentials)
@@ -394,6 +396,67 @@ def send_batch():
     all_alerts.extend(port_scan_detector.check())
     all_alerts.extend(dos_detector.check())
     all_alerts.extend(flow_aggregator.detect_anomalies())
+
+    # AI Anomaly Detection
+    packet_count = len(packets)
+    bytes_transferred = sum(p.get("packet_size", 0) for p in packets)
+    unique_ports = len(set(p.get("port", 0) for p in packets if p.get("port") is not None))
+    connection_rate = packet_count / max(SEND_INTERVAL, 1)
+
+    features = [
+        packet_count,
+        bytes_transferred,
+        unique_ports,
+        connection_rate
+    ]
+
+    # Get raw prediction value for debug output (-1 = anomaly, 1 = normal)
+    prediction = None
+    if ai_detector.trained:
+        prediction = ai_detector.model.predict([features])[0]
+
+    print("========== AI CHECK ==========")
+    print("Features:", features)
+    print("Prediction:", prediction)
+
+    if prediction == -1:
+        print("🚨 AI DETECTED ANOMALY 🚨")
+    else:
+        print("✅ NORMAL TRAFFIC")
+
+    # Identify dominant source IP for the alert target
+    dominant_ip = "Multiple/System"
+    if packets:
+        from collections import Counter
+        ip_counts = Counter(p.get("source_ip") for p in packets if p.get("source_ip"))
+        if ip_counts:
+            dominant_ip = ip_counts.most_common(1)[0][0]
+
+    ai_result = ai_detector.predict(features, source_ip=dominant_ip)
+    if ai_result:
+        all_alerts.append(ai_result)
+        
+        # Store AI detection in DB
+        import requests as req_lib
+        try:
+            req_lib.post(
+                f"{SUPABASE_URL}/rest/v1/ai_detections",
+                headers={
+                    "apikey": SUPABASE_KEY,
+                    "Authorization": f"Bearer {SUPABASE_KEY}",
+                    "Content-Type": "application/json",
+                    "Prefer": "return=minimal"
+                },
+                json={
+                    "ip": dominant_ip,
+                    "timestamp": time.strftime('%Y-%m-%dT%H:%M:%S.000Z', time.gmtime()),
+                    "confidence": ai_result.get("confidence", 0.92),
+                    "features": features
+                },
+                timeout=5
+            )
+        except Exception as e:
+            logging.error(f"Failed to insert ai_detection: {e}")
 
     # Malware behavior detection
     current_flows = flow_aggregator.get_flows()

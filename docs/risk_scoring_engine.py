@@ -87,8 +87,8 @@ def compute_alert_scores() -> Dict[str, int]:
 
 def compute_anomaly_scores() -> Dict[str, int]:
     """
-    Count anomaly predictions per source IP (from features.source_ip).
-    Each anomaly = 5 points.
+    Count anomaly predictions per source IP. Standard predictions = 5 points.
+    Live AI Anomalies count for a heavy +20 point boost.
     """
     predictions = _supabase_get("predictions", {
         "select": "features,is_anomaly",
@@ -105,6 +105,16 @@ def compute_anomaly_scores() -> Dict[str, int]:
         else:
             ip = "unknown"
         scores[ip] += 5
+
+    # Fetch dedicated AI Anomalies from live_alerts
+    ai_alerts = _supabase_get("live_alerts", {
+        "select": "source_ip",
+        "alert_type": "eq.AI Anomaly",
+        "status": "eq.active",
+    })
+    for alert in ai_alerts:
+        ip = alert.get("source_ip", "unknown")
+        scores[ip] += 20  # Boost for true zero-day/unknown behavior
 
     return dict(scores)
 

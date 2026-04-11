@@ -30,6 +30,7 @@ import NetworkTopology from "@/components/NetworkTopology";
 import DataRetention from "@/components/DataRetention";
 import RiskScoreDashboard from "@/components/RiskScoreDashboard";
 import AttackTimeline from "@/components/AttackTimeline";
+import AIInsightsDashboard from "@/components/AIInsightsDashboard";
 import { PWAInstallPrompt } from "@/components/PWAInstallPrompt";
 import { OfflineBanner } from "@/components/OfflineBanner";
 import { useIDSDataStore } from "@/hooks/useIDSDataStore";
@@ -174,6 +175,7 @@ const Index = () => {
       case "topology": return <NetworkTopology isDemoMode={dataStore.isDemoMode} />;
       case "retention": return <DataRetention isDemoMode={dataStore.isDemoMode} />;
       case "risk": return <RiskScoreDashboard isDemoMode={dataStore.isDemoMode} />;
+      case "ai-insights": return <AIInsightsDashboard />;
       case "timeline": return <AttackTimeline isDemoMode={dataStore.isDemoMode} />;
       default: return null;
     }

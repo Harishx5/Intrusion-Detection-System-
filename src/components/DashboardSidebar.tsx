@@ -82,6 +82,7 @@ const navGroups: NavGroup[] = [
       { title: "Threat Intel", value: "threats", icon: ShieldAlert },
       { title: "Hunt", value: "hunt", icon: Crosshair },
       { title: "Risk Dashboard", value: "risk", icon: Gauge },
+      { title: "AI Insights", value: "ai-insights", icon: Brain },
       { title: "Assets", value: "assets", icon: Server },
     ],
   },

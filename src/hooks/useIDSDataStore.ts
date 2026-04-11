@@ -127,7 +127,7 @@ export interface ThreatDetection {
 export interface SecurityAlert {
   id: string;
   timestamp: string;
-  type: "DoS" | "DDoS" | "Port Scan" | "Brute Force" | "Malware" | "Anomaly";
+  type: "DoS" | "DDoS" | "Port Scan" | "Brute Force" | "Malware" | "Anomaly" | "AI Anomaly";
   severity: "low" | "medium" | "high";
   sourceIP: string;
   targetIP: string;
