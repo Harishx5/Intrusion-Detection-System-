@@ -174,7 +174,7 @@ export const useIDSDataStore = () => {
     activeConnections: 1247,
   });
   const [trafficData, setTrafficData] = useState<TrafficData[]>([]);
-  
+
   const { calculateMetrics } = useMetricsCalculator();
 
   // ---------------------------------------------------------------------------
@@ -184,9 +184,9 @@ export const useIDSDataStore = () => {
     setNetworkEvents(prev => {
       // Keep at most 100 events in memory (sliding window)
       const updated = [event, ...prev.slice(0, 99)];
-      
+
       const metrics = calculateMetrics(updated, threats);
-      
+
       setSystemMetrics(prev => ({
         ...prev,
         packetsProcessed: prev.packetsProcessed + 1,
@@ -199,18 +199,18 @@ export const useIDSDataStore = () => {
       // Aggregate into 1-second time slots for the traffic chart
       const now = new Date();
       const time = now.toLocaleTimeString();
-      
+
       setTrafficData(prev => {
         const latest = prev[prev.length - 1];
         if (latest && latest.time === time) {
-          return prev.map((item, index) => 
-            index === prev.length - 1 
+          return prev.map((item, index) =>
+            index === prev.length - 1
               ? {
-                  ...item,
-                  inbound: metrics.inboundTraffic,
-                  outbound: metrics.outboundTraffic,
-                  events: item.events + 1,
-                }
+                ...item,
+                inbound: metrics.inboundTraffic,
+                outbound: metrics.outboundTraffic,
+                events: item.events + 1,
+              }
               : item
           );
         } else {
@@ -224,7 +224,7 @@ export const useIDSDataStore = () => {
           return [...prev.slice(-19), newSlot];
         }
       });
-      
+
       return updated;
     });
   }, [calculateMetrics, threats]);
@@ -235,9 +235,9 @@ export const useIDSDataStore = () => {
   const addThreat = useCallback((threat: ThreatDetection) => {
     setThreats(prev => {
       const updated = [threat, ...prev.slice(0, 49)];
-      
+
       const metrics = calculateMetrics(networkEvents, updated);
-      
+
       setSystemMetrics(prev => ({
         ...prev,
         threatsBlocked: prev.threatsBlocked + 1,
@@ -245,17 +245,17 @@ export const useIDSDataStore = () => {
         networkHealth: metrics.networkHealth,
       }));
 
-      setTrafficData(prev => 
-        prev.map((item, index) => 
-          index === prev.length - 1 
+      setTrafficData(prev =>
+        prev.map((item, index) =>
+          index === prev.length - 1
             ? { ...item, threats: item.threats + 1 }
             : item
         )
       );
-      
+
       return updated;
     });
-    
+
     const alert: SecurityAlert = {
       id: `alert-${threat.id}`,
       timestamp: threat.timestamp,
@@ -268,7 +268,7 @@ export const useIDSDataStore = () => {
       threatId: threat.id,
       ...({ metadata: { source: threat.attackType === 'AI Anomaly' ? 'AI' : 'Rule', confidence: threat.confidence } } as any),
     };
-    
+
     setAlerts(prev => [alert, ...prev.slice(0, 49)]);
   }, [calculateMetrics, networkEvents]);
 
@@ -276,7 +276,7 @@ export const useIDSDataStore = () => {
   // updateAlertStatus — mark an alert as investigating / resolved
   // ---------------------------------------------------------------------------
   const updateAlertStatus = useCallback((alertId: string, status: SecurityAlert['status']) => {
-    setAlerts(prev => prev.map(alert => 
+    setAlerts(prev => prev.map(alert =>
       alert.id === alertId ? { ...alert, status } : alert
     ));
   }, []);

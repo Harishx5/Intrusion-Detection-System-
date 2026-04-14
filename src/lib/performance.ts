@@ -10,7 +10,7 @@ export function debounce<T extends (...args: any[]) => any>(
   func: T,
   wait: number
 ): (...args: Parameters<T>) => void {
-  let timeout: NodeJS.Timeout | null = null;
+  let timeout: ReturnType<typeof setTimeout> | null = null;
 
   return function executedFunction(...args: Parameters<T>) {
     const later = () => {
@@ -34,7 +34,7 @@ export function throttle<T extends (...args: any[]) => any>(
   limit: number
 ): (...args: Parameters<T>) => void {
   let inThrottle: boolean;
-  
+
   return function executedFunction(...args: Parameters<T>) {
     if (!inThrottle) {
       func(...args);
@@ -56,7 +56,7 @@ export function rafThrottle<T extends (...args: any[]) => any>(
     if (rafId !== null) {
       cancelAnimationFrame(rafId);
     }
-    
+
     rafId = requestAnimationFrame(() => {
       func(...args);
       rafId = null;
@@ -84,10 +84,10 @@ export function measureRenderTime(componentName: string, callback: () => void) {
 export function isLowEndDevice(): boolean {
   // Check hardware concurrency (CPU cores)
   const cores = navigator.hardwareConcurrency || 1;
-  
+
   // Check device memory if available (in GB)
   const memory = (navigator as any).deviceMemory || 4;
-  
+
   // Consider device low-end if it has 2 or fewer cores or 2GB or less RAM
   return cores <= 2 || memory <= 2;
 }
@@ -101,7 +101,7 @@ export function getOptimalRefreshRate(): {
   chartUpdate: number;
 } {
   const isLowEnd = isLowEndDevice();
-  
+
   return {
     eventGeneration: isLowEnd ? 500 : 300,
     metricsUpdate: isLowEnd ? 2000 : 1000,

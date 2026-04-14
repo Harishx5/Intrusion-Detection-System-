@@ -26,7 +26,7 @@ const DemoModeToggle = ({ isDemoMode, onToggle }: DemoModeToggleProps) => {
                 {isDemoMode ? "Demo Mode" : "Live Mode"}
               </Label>
               <p className="text-sm text-muted-foreground">
-                {isDemoMode 
+                {isDemoMode
                   ? "Generating synthetic network events for demonstration"
                   : "Using real data sources and ingestion"
                 }
